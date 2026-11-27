@@ -1,0 +1,60 @@
+{
+  "name": "AI Rights Assistant",
+  "version": "1.0.0",
+  "description": "A Hebrew-speaking CLI agent that helps residents of Israel identify social rights and benefits they may be entitled to (National Insurance, labor law, tax, municipal and immigrant benefits). It understands the user's situation, asks follow-up questions when details are missing, retrieves relevant rights from a curated knowledge base (RAG), cites official sources, and refuses out-of-scope, fraudulent or prompt-injection requests.",
+  "creator_name": "diniveber",
+  "contact_information": "https://github.com/diniveber/ai-rights-assistant/issues",
+  "release_date": "2026-11-27",
+  "repository_url": "https://github.com/diniveber/ai-rights-assistant",
+  "download_url": "https://github.com/diniveber/ai-rights-assistant/releases/download/v1.0.0/agent.exe",
+
+  "target_audience": "Residents of Israel (employees, job seekers, parents, retirees, people with disabilities, reservists, new immigrants) and social workers who assist them",
+  "professional_fields": [
+    "Social Security and Welfare",
+    "Labor Law",
+    "Personal Taxation",
+    "Social Work"
+  ],
+  "tasks_capable_of_performing": [
+    "Identify rights and benefits relevant to a personal situation",
+    "Ask follow-up questions to complete the user's profile",
+    "Explain eligibility conditions and how to claim each right",
+    "Cite official sources (National Insurance, Kol Zchut, gov.il)",
+    "Explain a local document such as a termination letter or a National Insurance notice",
+    "Export a conversation summary to a local text file"
+  ],
+  "examples_of_suitable_questions": [
+    "פוטרתי אחרי 3 שנים בעבודה, מה מגיע לי?",
+    "ילדתי לפני חודש, לאילו הטבות אני זכאית?",
+    "אני בן 67 ועדיין עובד, מגיעה לי קצבת זקנה?",
+    "שירתתי 40 יום במילואים, מה מגיע לי?",
+    "עליתי לארץ לפני חצי שנה, מה מגיע לי?"
+  ],
+
+  "technical_specifications": {
+    "framework": "LangGraph",
+    "llm_provider": "OpenAI (default), OpenRouter (switchable via LLM_PROVIDER)",
+    "supported_models": [
+      "gpt-5.4-mini",
+      "gpt-5.4-nano",
+      "nvidia/nemotron-3.5-super-vl:free"
+    ],
+    "monitoring": "LangSmith",
+    "language": "Hebrew",
+    "interface": "CLI (Windows console executable)",
+    "features_enabled": {
+      "rag": true,
+      "web_search": false,
+      "code_execution": false,
+      "mcp_support": false,
+      "human_in_the_loop": true,
+      "guardrails": true,
+      "evaluator": true,
+      "conversation_summary_export": true
+    },
+    "required_permissions": [
+      "local_file_read",
+      "local_file_write"
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# Python
+.venv/
+.venv-build/
+__pycache__/
+*.pyc
+
+# Exported conversation summaries (personal data)
+summaries/
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Course document and local build logs
+*.docx
