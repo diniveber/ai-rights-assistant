@@ -1,4 +1,4 @@
 ﻿model,provider,questions,errors,avg_latency_s,quality_judge_overall,judge_relevance,judge_accuracy,judge_completeness,judge_format,judge_reliability,data_quality_f1,precision,recall,avg_cost_per_question,avg_theoretical_cost,judge_cost_total
 gpt-5.4-nano,openai,10,0,15.16,4.56,4.4,4.5,4.4,4.9,4.6,0.96,0.93,1.0,0.003016,0.003016,0.102162
 gpt-5.4-mini,openai,10,0,10.06,4.86,4.8,5,4.5,5,5,1.0,1.0,1.0,0.008668,0.008668,0.086432
-nvidia/nemotron-3.5-super-vl:free,openrouter,6,6,,,,,,,,,,,0,0,0.0
+nvidia/nemotron-3.5-super-vl:free,openrouter,6,0,81.69,4.67,4.83,4.5,5,4.83,4.17,1.0,1.0,1.0,0.0,0.004319,0.06112
