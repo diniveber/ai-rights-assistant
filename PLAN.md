@@ -157,11 +157,11 @@ ai-rights-assistant/
 
 ## שלב 8 – GitHub ו-Release
 
-- [ ] `git init`, קומיטים מסודרים
-- [ ] **וידוא שאין מפתחות** בקבצים או בהיסטוריה (`.env` מוחרג)
-- [ ] `gh repo create ai-rights-assistant --public --source . --push`
-- [ ] תג `v1.0.0` + `gh release create v1.0.0 dist/agent.exe`
-- [ ] עדכון `download_url` ב-manifest לפי הקישור בפועל
+- [x] `git init`, קומיטים מסודרים
+- [x] **וידוא שאין מפתחות** בקבצים או בהיסטוריה (`.env` מוחרג)
+- [x] `gh repo create ai-rights-assistant --public --source . --push`
+- [x] תג `v1.0.0` + `gh release create v1.0.0 dist/agent.exe`
+- [x] עדכון `download_url` ב-manifest לפי הקישור בפועל
 
 ---
 
@@ -188,14 +188,14 @@ ai-rights-assistant/
 
 **Evals**
 - [x] פלט CSV לכל eval בקובץ נפרד
-- [ ] השוואת מודלים עם LLM-as-judge לפי rubric
+- [x] השוואת מודלים עם LLM-as-judge לפי rubric (המודל החינמי – ממתין לחידוש מכסה)
 - [x] עלויות: מודל בתשלום, עלות לכל שלב ועלות כוללת, עלות תיאורטית לחינמי
 - [x] אי-זליגה: ≥5 שאלות מחוץ לתחום, refusal rate ב-CSV
 
 **הפצה**
 - [x] `agent.exe` עם PyInstaller
-- [ ] ריפו GitHub מסודר
-- [ ] exe תחת Releases
+- [x] ריפו GitHub מסודר
+- [x] exe תחת Releases
 - [x] `manifest.json` לפי נספח 1
 - [x] `README.md` מפורט
 - [x] `.env.example` ללא ערכים אמיתיים
