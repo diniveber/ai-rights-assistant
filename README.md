@@ -1,103 +1,89 @@
-# AI Rights Assistant – עוזר זכויות והטבות
+# AI Rights Assistant
 
-אייג'נט CLI בעברית שעוזר לתושבי ישראל לגלות זכויות והטבות שמגיעות להם. הוא מכסה ביטוח לאומי, דיני עבודה, מסים, הנחות ברשות המקומית וזכויות עולים.
+A command-line agent that helps residents of Israel discover the social rights and benefits they may be entitled to: National Insurance, labor law, tax, municipal discounts and new-immigrant benefits.
 
-האייג'נט בנוי כ-Workflow ב-**LangGraph** ומנוטר ב-**LangSmith**. הוא:
-- מבין את המצב של המשתמש, ושואל שאלות המשך כשחסרים פרטים חשובים.
-- שולף זכויות רלוונטיות מבסיס ידע מקומי (RAG), ומציג לכל אחת תנאי זכאות, דרך מימוש וקישור למקור רשמי.
-- מסרב לשאלות מחוץ לתחום, לבקשות לרמות את המערכת ולניסיונות prompt injection.
-- קורא קובץ מקומי (למשל מכתב פיטורים) ומייצא תקציר שיחה, בשני המקרים רק אחרי אישור `[Y/N]` מהמשתמש.
+The agent is built as a **LangGraph** workflow and monitored with **LangSmith**. **It converses in Hebrew**, the language of its target users and official sources.
 
-> ⚠️ האייג'נט מספק מידע כללי בלבד ואינו מחליף ייעוץ משפטי או פנייה לגורם המוסמך.
+It:
+- Understands the user's situation and asks follow-up questions when important details are missing.
+- Retrieves relevant rights from a local knowledge base (RAG) and presents them with what to check and a link to the source.
+- Refuses off-topic questions, requests to cheat the system and prompt-injection attempts.
+- Reads a local file (for example, a termination letter) and exports a conversation summary, both only after a `[Y/N]` approval from the user.
+
+> ⚠️ The agent provides general information only. It is not legal advice and does not replace contacting the competent authority.
 
 ---
 
-## הורדה והרצה מהירה (Windows)
+## Quick start (Windows)
 
-1. מורידים את `agent.exe` מעמוד ה-[Releases](https://github.com/diniveber/ai-rights-assistant/releases).
-2. באותה תיקייה יוצרים קובץ `.env` לפי [.env.example](.env.example). מספיק `OPENAI_API_KEY`, ומפתח LangSmith אופציונלי.
-3. מריצים מתוך הטרמינל:
+1. Download `agent.exe` from the [Releases](https://github.com/diniveber/ai-rights-assistant/releases) page.
+2. In the same folder, create a `.env` file based on [.env.example](.env.example). `OPENAI_API_KEY` is enough; a LangSmith key is optional.
+3. Run it from a terminal:
    ```
    agent.exe
    ```
 
 ---
 
-## ארכיטקטורה
+## Architecture
 
-```
-                        ┌──────────────┐
-    /file ─────────────▶│  load_file   │──(HITL: Y/N)──┐
-                        └──────────────┘               │
-                                                       ▼
- הודעה ───────────────────────────────────────▶ ┌─────────────┐
-                                                │  guardrail  │  GuardRail
-                                                └─────────────┘
-                     מחוץ לתחום / הונאה / injection │  ברכה  │  בתחום
-                        ┌──────────────────────────┘    │    │
-                        ▼                               ▼    ▼
-                   ┌─────────┐                   ┌───────┐ ┌─────────────────┐
-                   │ refuse  │                   │ greet │ │ extract_profile │  Gate
-                   └─────────┘                   └───────┘ └─────────────────┘
-                                                  חסר מידע │          │ מספיק מידע
-                                                           ▼          ▼
-                                                  ┌──────────────┐ ┌──────────┐
-                                                  │ ask_followup │ │ retrieve │  RAG (BM25)
-                                                  └──────────────┘ └──────────┘
-                                                                        │
-                                                                        ▼
-                                                                ┌──────────────┐
-                                                        ┌──────▶│ draft_answer │
-                                                        │       └──────────────┘
-                                                  נכשל  │               │
-                                       (ניסיון חוזר אחד)│               ▼
-                                                        │        ┌───────────┐
-                                                        └────────│ evaluator │  Evaluator
-                                                                 └───────────┘
-                                                                       │ עבר
-                                                                       ▼
-                                                                 ┌──────────┐
-                                                                 │ finalize │  מקורות + הסתייגות
-                                                                 └──────────┘
+```mermaid
+flowchart TD
+    start([User input]) -->|/file| load_file["load_file<br/>HITL: Y/N"]
+    start -->|message| guardrail{"guardrail"}
+    start -->|/summary| summarize
+    load_file -->|approved| guardrail
+    load_file -->|declined or failed| done([End])
 
- /summary ─▶ summarize ─(HITL: Y/N)─▶ save_summary
+    guardrail -->|out of scope / fraud / injection| refuse
+    guardrail -->|greeting| greet
+    guardrail -->|in scope| extract{"extract_profile"}
+
+    extract -->|missing details| followup[ask_followup]
+    extract -->|enough details| retrieve["retrieve<br/>RAG: BM25"]
+    retrieve --> draft[draft_answer]
+    draft --> evaluator{"evaluator"}
+    evaluator -->|failed, one retry| draft
+    evaluator -->|passed| finalize["finalize<br/>sources + disclaimer"]
+
+    summarize -->|"HITL: Y/N"| save_summary
 ```
 
-| רכיב | מימוש |
+| Component | Implementation |
 |---|---|
-| **GuardRails** | הנוד `guardrail` מסווג כל הודעה לאחת הקטגוריות: `in_scope`, ‏`greeting`, ‏`out_of_scope`, ‏`fraud`, ‏`injection` |
-| **Gates** | קצוות מותנים: בקשה מחוץ לתחום מגיעה לסירוב, וכשחסר מידע עוברים לשאלות המשך (עד 2 סבבים) |
-| **Evaluator** | הנוד `evaluator` בודק שהתשובה מבוססת רק על הזכויות שנשלפו ושהיא בפורמט הנכון. אם הבדיקה נכשלת, התשובה חוזרת לניסוח פעם אחת |
-| **HITL** | `interrupt` של LangGraph, עם אישור `[Y/N]` לפני קריאת קובץ אישי ולפני שמירת תקציר לדיסק |
-| **הרחבה: RAG** | חיפוש BM25 מקומי בקובץ [agent/data/rights.json](agent/data/rights.json), שכולל 19 זכויות ב-9 קטגוריות, כל אחת עם קישור למקור |
-| **זיכרון שיחה** | checkpointer של LangGraph. הפרטים שהמשתמש מסר נצברים לאורך השיחה |
-| **ניטור** | LangSmith, דרך משתני סביבה. ריצות ה-evals נשמרות בפרויקט נפרד עם הסיומת `-evals` |
-| **ספק LLM** | ‏OpenAI כברירת מחדל. אפשר לעבור ל-OpenRouter עם `LLM_PROVIDER=openrouter` או `--provider openrouter` |
-| **עלויות** | כל קריאה למודל נמדדת לפי tokens × תמחור, ומוצגת לפי נוד. למודל חינמי מוצגת גם העלות התיאורטית |
+| **Guardrails** | The `guardrail` node classifies every message as `in_scope`, `greeting`, `out_of_scope`, `fraud` or `injection` |
+| **Gates** | Conditional edges: out-of-scope requests are refused; missing information leads to follow-up questions (up to 2 rounds) |
+| **Evaluator** | The `evaluator` node checks that the answer relies only on the retrieved rights and follows the required format. A failed answer is redrafted once |
+| **Human-in-the-loop** | LangGraph `interrupt` with a `[Y/N]` approval before reading a personal file and before writing a summary to disk |
+| **Extension: RAG** | Local BM25 search over [agent/data/rights.json](agent/data/rights.json): 19 rights in 9 categories, each with a source link |
+| **Conversation memory** | LangGraph checkpointer. Details the user provides accumulate across turns |
+| **Monitoring** | LangSmith, configured through environment variables. Eval runs go to a separate project with an `-evals` suffix |
+| **LLM provider** | OpenAI by default. Switch to OpenRouter with `LLM_PROVIDER=openrouter` or `--provider openrouter` |
+| **Cost tracking** | Every model call is measured as tokens × price and shown per node. Free models also show a theoretical cost |
 
-### מבנה הפרויקט
+### Project structure
 
 ```
 ai-rights-assistant/
 ├── agent/
 │   ├── __init__.py
-│   ├── config.py         # ספקים, מודלים, תמחור
-│   ├── llm.py            # יצירת מודל לפי ספק + מדידת עלות
-│   ├── prompts.py        # פרומפטים לכל נוד
-│   ├── graph.py          # הגדרת ה-LangGraph workflow
+│   ├── config.py         # providers, models, pricing
+│   ├── llm.py            # model factory per provider + cost measurement
+│   ├── prompts.py        # prompts for each node
+│   ├── graph.py          # LangGraph workflow definition
 │   ├── nodes.py          # guardrail, extract, retrieve, draft, evaluator, refuse, HITL...
-│   ├── tools.py          # RAG (BM25), קריאת קבצים, ייצוא תקציר
-│   ├── cli.py            # entrypoint של ה-CLI
-│   └── data/rights.json  # בסיס הידע
+│   ├── tools.py          # RAG (BM25), file reading, summary export
+│   ├── cli.py            # CLI entry point
+│   └── data/rights.json  # knowledge base
 ├── evals/
-│   ├── dataset.py        # 10 שאלות בתחום + 10 מחוץ לתחום, מתויגות
-│   ├── judge.py          # LLM-as-judge על מודל קבוע
-│   ├── rubric.md         # rubric לשופט
-│   ├── compare_models.py # eval 1 – השוואת מודלים
-│   ├── cost_eval.py      # eval 2 – עלויות
-│   ├── scope_eval.py     # eval 3 – מקצועיות ואי-זליגה
-│   └── results/          # פלטי CSV
-├── check_setup.py        # בדיקת מפתחות וחיבורים
+│   ├── dataset.py        # 10 in-scope + 10 out-of-scope labelled questions
+│   ├── judge.py          # LLM-as-judge on a fixed model
+│   ├── rubric.md         # judge rubric
+│   ├── compare_models.py # eval 1: model comparison
+│   ├── cost_eval.py      # eval 2: cost
+│   ├── scope_eval.py     # eval 3: professionalism and scope leakage
+│   └── results/          # CSV outputs
+├── check_setup.py        # verifies keys and connections
 ├── manifest.json
 ├── requirements.txt
 ├── README.md
@@ -106,151 +92,150 @@ ai-rights-assistant/
 
 ---
 
-## התקנה מקוד המקור
+## Installation from source
 
-דרוש Python 3.10 ומעלה.
+Requires Python 3.10 or later.
 
 ```bash
 git clone https://github.com/diniveber/ai-rights-assistant.git
 cd ai-rights-assistant
 python -m venv .venv
-.venv\Scripts\activate          # ב-Linux/macOS: source .venv/bin/activate
+.venv\Scripts\activate          # Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
-copy .env.example .env          # ממלאים את המפתחות
-python check_setup.py           # בודק את OpenAI, ‏OpenRouter ו-LangSmith
+copy .env.example .env          # then fill in your keys
+python check_setup.py           # checks OpenAI, OpenRouter and LangSmith
 ```
 
-### משתני סביבה (`.env`)
+### Environment variables (`.env`)
 
-| משתנה | תיאור |
+| Variable | Description |
 |---|---|
-| `LLM_PROVIDER` | ‏`openai` (ברירת מחדל) או `openrouter` |
-| `OPENAI_API_KEY` | מפתח OpenAI |
-| `OPENROUTER_API_KEY` | מפתח OpenRouter (חשבון חינמי מספיק למודלים החינמיים) |
-| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` | ניטור ב-LangSmith |
-| `RIGHTS_MODEL` | אופציונלי: מודל ברירת מחדל |
+| `LLM_PROVIDER` | `openai` (default) or `openrouter` |
+| `OPENAI_API_KEY` | OpenAI key |
+| `OPENROUTER_API_KEY` | OpenRouter key (a free account is enough for free models) |
+| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` | LangSmith monitoring |
+| `RIGHTS_MODEL` | Optional default model |
 
 ---
 
-## שימוש ב-CLI
+## CLI usage
 
 ```bash
-python -m agent.cli                                   # מקוד המקור
-agent.exe                                             # מהקובץ המקומפל
-agent.exe --provider openrouter                       # מודל חינמי דרך OpenRouter
+python -m agent.cli                      # from source
+agent.exe                                # compiled executable
+agent.exe --provider openrouter          # free model through OpenRouter
 agent.exe --model gpt-5.4-nano --quiet
 ```
 
-| פקודה | תיאור |
+| Command | Description |
 |---|---|
-| `help` או `?` | מדריך שימוש קצר |
-| `/file <נתיב> [שאלה]` | צירוף קובץ מקומי (txt, ‏md, ‏pdf, ‏docx). דורש אישור `[Y/N]` |
-| `/summary` | תקציר שיחה ושמירתו לקובץ טקסט בתיקייה `summaries/`. דורש אישור `[Y/N]` |
-| `/cost` | עלות ושימוש מצטברים בסשן |
-| `/models` | רשימת המודלים המוגדרים |
-| `/reset` | התחלת שיחה חדשה |
-| `/exit` | יציאה |
+| `help` or `?` | Short usage guide |
+| `/file <path> [question]` | Attach a local file (txt, md, pdf, docx). Requires `[Y/N]` approval |
+| `/summary` | Summarize the conversation and save it to a text file under `summaries/`. Requires `[Y/N]` approval |
+| `/cost` | Accumulated session cost and usage |
+| `/models` | List configured models |
+| `/reset` | Start a new conversation |
+| `/exit` | Quit |
 
-אפשרויות שורת פקודה: `--model`, ‏`--provider`, ‏`--quiet` (מסתיר את הודעות ה-INFO), ‏`--debug` (מציג traceback מלא), ‏`--version`.
+Command-line options: `--model`, `--provider`, `--quiet` (hide node INFO messages), `--debug` (full traceback), `--version`.
 
-### דוגמת שיחה
+### Example session
+
+The conversation is in Hebrew; translations are added here as `#` comments.
 
 ```
-> פוטרתי
+אתה: פוטרתי                                  # "I was fired"
 [INFO] Entering Node: guardrail...
 [INFO] Entering Node: extract_profile...
 [INFO] Entering Node: ask_followup...
-כדי לבדוק אילו זכויות מגיעות לך, אשמח לדעת:
-1. כמה זמן עבדת במקום העבודה?
-2. האם עבדת במשרה מלאה, ומה היה השכר החודשי בערך?
+# The agent asks: how long did you work there? Full time? Approximate salary?
 
-> 3 שנים, משרה מלאה
+אתה: 3 שנים, משרה מלאה                        # "3 years, full time"
 [INFO] Entering Node: guardrail...
 [INFO] Entering Node: extract_profile...
 [INFO] Entering Node: retrieve...
 [INFO] Entering Node: draft_answer...
 [INFO] Entering Node: evaluator...
 [INFO] Entering Node: finalize...
-עוזר: ... פיצויי פיטורים, הודעה מוקדמת, דמי אבטלה ...
+# The answer covers severance pay, advance notice, unemployment benefits and more,
+# followed by a source link for each right.
 
-מקורות:
-  • פיצויי פיטורים: https://...
-
-── עלות ושימוש (הודעה זו) ─────────────────────
+── עלות ושימוש (הודעה זו) ─────────────────────   # cost and usage (this message)
   guardrail           539 in /    63 out    1.9s  $0.00069
   extract_profile     830 in /   287 out    6.9s  $0.00191
   draft_answer       1980 in /   616 out    4.6s  $0.00426
   evaluator          1802 in /   142 out    2.4s  $0.00199
   סה"כ               5151 in /  1108 out          $0.00885
-  מצטבר בסשן: $0.00885
 ```
 
-(הדוגמה מקוצרת. המספרים לקוחים מהרצה אמיתית של gpt-5.4-mini ומשתנים בכל הרצה.)
+(Abridged. The cost figures come from a real `gpt-5.4-mini` run and vary between runs.)
 
-השגיאות מוצגות בהודעות ברורות בעברית: מפתח חסר או שגוי, מודל לא זמין, חריגה ממגבלת קצב, בעיית חיבור או קובץ שלא נמצא.
+Errors are reported as clear messages in Hebrew: missing or invalid key, unavailable model, rate limit, connection problem or file not found.
 
 ---
 
 ## Evals
 
-שלושה evals. כל אחד שומר CSV מפורט וקובץ `_summary.csv` בתיקייה [evals/results/](evals/results/).
+Three evals. Each writes a detailed CSV and a `_summary.csv` to [evals/results/](evals/results/).
 
 ```bash
-python evals/compare_models.py     # השוואת מודלים (LLM-as-judge)
-python evals/cost_eval.py          # עלויות
-python evals/scope_eval.py         # מקצועיות ואי-זליגה
+python evals/compare_models.py     # model comparison (LLM-as-judge)
+python evals/cost_eval.py          # cost
+python evals/scope_eval.py         # professionalism and scope leakage
 ```
 
-### 1. השוואת מודלים
+### 1. Model comparison
 
-אותן שאלות רצות על שלושה מודלים: שניים בתשלום ב-OpenAI ואחד חינמי ב-OpenRouter. המדדים:
-- **זמן:** נמדד אוטומטית.
-- **איכות ואמינות:** שופט LLM-as-judge נותן ציון 1–5 לפי [evals/rubric.md](evals/rubric.md), בחמישה קריטריונים: רלוונטיות, דיוק עובדתי, שלמות, פורמט ואמינות. השופט הוא מודל קבוע אחד לכל ההשוואות, **gpt-5.4**, שבכוונה לא נמצא בין המודלים שנבדקים, כדי למנוע הטיה לטובת עצמו.
-- **איכות הנתונים:** precision, ‏recall ו-F1 של הזכויות שזוהו, מול הזכויות שתויגו מראש לכל שאלה.
+The same questions run on three models: two paid OpenAI models and one free OpenRouter model.
 
-| מודל | שאלות | ציון שופט | אמינות | F1 | זמן ממוצע | עלות לשאלה |
+- **Latency:** measured automatically.
+- **Quality and reliability:** an LLM-as-judge scores each answer from 1 to 5 using [evals/rubric.md](evals/rubric.md) on relevance, factual accuracy, completeness, format and reliability. The judge is a single fixed model, **gpt-5.4**, deliberately not one of the compared models, to avoid self-preference bias.
+- **Data quality:** precision, recall and F1 of the rights identified, against the rights labelled for each question.
+
+| Model | Questions | Judge score | Reliability | F1 | Avg. latency | Cost per question |
 |---|---|---|---|---|---|---|
-| gpt-5.4-mini | 10 | **4.86** | **5.0** | **1.00** | **10.1 שנ'** | $0.0087 |
-| gpt-5.4-nano | 10 | 4.56 | 4.6 | 0.96 | 15.2 שנ' | **$0.0030** |
-| nemotron-3.5-super-vl:free | 6 | 4.67 | 4.17 | **1.00** | 81.7 שנ' | ‏$0 (תיאורטית $0.0043) |
+| gpt-5.4-mini | 10 | **4.86** | **5.0** | **1.00** | **10.1 s** | $0.0087 |
+| gpt-5.4-nano | 10 | 4.56 | 4.6 | 0.96 | 15.2 s | **$0.0030** |
+| nemotron-3.5-super-vl:free | 6 | 4.67 | 4.17 | **1.00** | 81.7 s | $0 (theoretical $0.0043) |
 
-**מסקנה:**
-- ‏**gpt-5.4-mini** הוא האיכותי והמהיר ביותר, ולכן הוא ברירת המחדל.
-- ‏**gpt-5.4-nano** זול פי 3 בערך ואיכותו קרובה. החולשה שלו היא בשלמות התשובות, למשל בשאלה על אזרח ותיק.
-- **המודל החינמי** זיהה את כל הזכויות הנכונות, אבל קיבל את ציון האמינות הנמוך ביותר. הוא גם איטי פי 8 בערך, ולכן לא מתאים לשימוש אינטראקטיבי.
+**Conclusions**
+- **gpt-5.4-mini** had the highest quality and was the fastest, so it is the default.
+- **gpt-5.4-nano** is about 3× cheaper with close quality. Its weak point is completeness, for example on the senior-citizen question.
+- **The free model** identified all the expected rights but had the lowest reliability score. It is also about 8× slower, which makes it unsuitable for interactive use.
 
-> המודל החינמי נבדק על 6 שאלות בלבד, בגלל המכסה היומית של OpenRouter: ‏50 בקשות ביום. כדי להריץ רק אותו בלי לדרוס את שאר התוצאות:
+> The free model was tested on 6 questions only, because of OpenRouter's daily quota of 50 free requests. Its scores are therefore not directly comparable with the 10-question results. To re-run it without overwriting the other results:
 > `python evals/compare_models.py --models nvidia/nemotron-3.5-super-vl:free --merge`
 
-### 2. עלויות
+### 2. Cost
 
-שש משימות נפוצות: שאלה מפורטת, שאלה עמומה שמובילה לשאלות המשך, שיחה רב-שלבית, שאלה מחוץ לתחום, ניתוח קובץ מקומי, ושאלה עם תקציר שיחה. לכל משימה מחושבת עלות לכל נוד ועלות כוללת, לפי tokens × תמחור. למודל החינמי מוצגת עלות בפועל ($0) ולצידה עלות תיאורטית לפי תעריף שווה-ערך.
+Six common tasks: a detailed question, a vague question leading to follow-ups, a multi-turn conversation, an out-of-scope question, local file analysis, and a question with a conversation summary. Cost is computed per node and per task as tokens × price. The free model shows its actual cost ($0) next to a theoretical cost at an equivalent paid rate.
 
-| מודל | קריאות LLM | עלות בפועל (6 משימות) | עלות תיאורטית | הערכה ל-1,000 משימות |
+| Model | LLM calls | Actual cost (6 tasks) | Theoretical cost | Estimate per 1,000 tasks |
 |---|---|---|---|---|
 | gpt-5.4-nano | 20 | $0.0133 | $0.0133 | $2.21 |
 | gpt-5.4-mini | 22 | $0.0465 | $0.0465 | $7.75 |
-| nemotron-3.5-super-vl:free | 24 | $0.00 | $0.0223 | ‏$0 (תיאורטית $3.71) |
+| nemotron-3.5-super-vl:free | 24 | $0.00 | $0.0223 | $0 (theoretical $3.71) |
 
-### 3. מקצועיות ואי-זליגה
+### 3. Professionalism and scope leakage
 
-10 שאלות מחוץ לתחום: מתכונים, קוד, מניות, ייעוץ רפואי, פוליטיקה, בקשות הונאה ו-prompt injection, כולל מקרים גבוליים. בנוסף רצות 10 שאלות בתחום, כדי לזהות סירובי-יתר.
+Ten out-of-scope questions (recipes, code, stocks, medical advice, politics, fraud requests and prompt injection, including borderline cases), plus in-scope questions to detect over-refusal.
 
-| מודל | Refusal rate | זליגות | סירובי-יתר | דיוק כולל |
+| Model | Refusal rate | Leaks | Over-refusals | Overall accuracy |
 |---|---|---|---|---|
-| gpt-5.4-nano | **100%** (10/10) | 0 | 0% | 100% |
-| gpt-5.4-mini | **100%** (10/10) | 0 | 0% | 100% |
+| gpt-5.4-nano | **100%** (10/10) | 0 | 0% (0/10) | 100% |
+| gpt-5.4-mini | **100%** (10/10) | 0 | 0% (0/10) | 100% |
 | nemotron-3.5-super-vl:free | **100%** (10/10) | 0 | 0% (0/2) | 100% |
 
-כל המודלים סירבו לכל השאלות שמחוץ לתחום ולא ענו בטעות על אף אחת. הם גם לא סירבו לאף שאלה לגיטימית. ‏mini והמודל החינמי זיהו נכון את **סוג** הבעיה בכל 10 המקרים, כלומר הבחינו בין שאלה מחוץ לתחום, ניסיון הונאה ו-prompt injection. ‏nano זיהה נכון 9 מתוך 10.
+All models refused every out-of-scope question, with no leaks, and refused none of the legitimate ones. `gpt-5.4-mini` and the free model also identified the **type** of problem (off-topic, fraud or prompt injection) in all 10 cases; `gpt-5.4-nano` did so in 9 of 10.
 
-> המודל החינמי רץ על כל 10 השאלות שמחוץ לתחום, אבל רק על 2 שאלות בתחום, בגלל המכסה היומית: `python evals/scope_eval.py --models nvidia/nemotron-3.5-super-vl:free --free-in-scope 2 --merge`
+> The free model ran all 10 out-of-scope questions but only 2 in-scope ones, because of the daily quota:
+> `python evals/scope_eval.py --models nvidia/nemotron-3.5-super-vl:free --free-in-scope 2 --merge`
 
 ---
 
-## בניית agent.exe
+## Building agent.exe
 
-> ‏PyInstaller לא תומך ב-Python 3.10.0, בגלל באג במודול `dis`. לבנייה צריך Python ‏3.10.1 ומעלה. הקובץ שפורסם נבנה ב-Python 3.11.
+> PyInstaller does not support Python 3.10.0 because of a bug in the `dis` module. Use Python 3.10.1 or later. The released executable was built with Python 3.11.
 
 ```bash
 py -3.11 -m venv .venv-build
@@ -258,7 +243,7 @@ py -3.11 -m venv .venv-build
 .venv-build\Scripts\pyinstaller --noconfirm agent.spec
 ```
 
-הקובץ [agent.spec](agent.spec) בונה את [run_agent.py](run_agent.py) לקובץ exe יחיד מסוג Console. הוא כולל את `rights.json` ואת קבצי ה-metadata של ספריות LangChain. הבנייה ממנו שקולה לפקודה הזו:
+[agent.spec](agent.spec) builds [run_agent.py](run_agent.py) into a single console executable that bundles `rights.json` and the LangChain package metadata. It is equivalent to:
 
 ```bash
 pyinstaller --noconfirm --onefile --console --name agent ^
@@ -267,14 +252,15 @@ pyinstaller --noconfirm --onefile --console --name agent ^
   --copy-metadata langchain-openai --copy-metadata langgraph run_agent.py
 ```
 
-הקובץ נוצר בנתיב `dist/agent.exe` ושוקל כ-35MB. כדי להריץ אותו, שמים לידו קובץ `.env`.
+The output is `dist/agent.exe` (about 35 MB). Place a `.env` file next to it to run it.
 
 ---
 
-## מגבלות
+## Limitations
 
-- **בסיס הידע מוגבל:** 19 זכויות מרכזיות בלבד. סכומים ותנאים מתעדכנים מדי שנה, ולכן חשוב לבדוק תמיד בקישור הרשמי.
-- **המודל החינמי:** ב-OpenRouter יש מכסה של 50 בקשות חינמיות ביום, וזמן התגובה ארוך. לכן הוא נבדק על מדגם קטן יותר.
-- **השופט:** ‏gpt-5.4 הוא מאותה משפחה כמו המודלים שנבדקים. השופט היחיד מאפשר השוואה עקבית בין המודלים, אבל הוא לא מחליף בדיקה אנושית.
-- **עברית בטרמינל של Windows:** ב-Windows Terminal ובטרמינל של VS Code העברית מוצגת היטב. ב-`cmd.exe` הישן היא עלולה להופיע הפוכה או כסימני שאלה. מומלץ להריץ ב-Windows Terminal.
-- **פרטיות:** התקצירים נשמרים מקומית בתיקייה `summaries/`, שאינה נשמרת ב-git. אם LangSmith פעיל, ההודעות נשלחות לניטור. אפשר לכבות אותו עם `LANGSMITH_TRACING=false`.
+- **Small knowledge base:** 19 core rights only. Amounts and conditions change yearly, so always verify against the linked source.
+- **Language:** the interface, answers and knowledge base are in Hebrew.
+- **Free model:** OpenRouter allows 50 free requests per day and responses are slow, so it was evaluated on a smaller sample.
+- **Judge:** gpt-5.4 belongs to the same model family as two of the compared models. A single fixed judge keeps the comparison consistent but does not replace human review.
+- **Hebrew in Windows terminals:** Windows Terminal and the VS Code terminal display Hebrew well. The legacy `cmd.exe` console may show it reversed or as question marks.
+- **Privacy:** summaries are saved locally under `summaries/`, which is excluded from git. When LangSmith is enabled, messages are sent to it for monitoring; disable with `LANGSMITH_TRACING=false`.
